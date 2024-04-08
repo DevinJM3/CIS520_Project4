@@ -1,0 +1,9 @@
+cmake_minimum_required(VERSION 3.5)
+
+PROJECT(use_pthread)
+
+if(WIN32)
+    add_compile_options(-DRUNNING_LOCAL)
+endif()
+
+ADD_EXECUTABLE(use_pthread main.c)
