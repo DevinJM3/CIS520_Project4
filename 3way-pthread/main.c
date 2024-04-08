@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <unistd.h> 
 #include <string.h>
+#include <locale.h>
 #include <pthread.h> 
 
 #pragma region DEFINES
@@ -13,19 +14,20 @@
     #define TEXT_FILE "~dan/625/wiki_dump.txt"
 #endif
 #define NUMBER_OF_LINES 1000000
+#define NUMBER_OF_THREADS 2
+#define NUMBER_OF_LINES_PER_THREAD (NUMBER_OF_LINES / NUMBER_OF_THREADS)
 #pragma endregion
 
 #pragma region GLOBAL_VARIABLES
-//pthread_mutex_t mutex; // mutex for 
- 
-char biggest_char[NUMBER_OF_LINES];
+pthread_mutex_t mutex;    // mutex for the array
+
+char biggest_char[NUMBER_OF_THREADS][NUMBER_OF_LINES/NUMBER_OF_THREADS];
 #pragma endregion
 
 typedef struct{
     char *filename;
+    uint32_t thread_id;
     uint32_t start_line;
-    uint32_t end_line;
-    uint32_t lines_per_thread;
 } ThreadArgs;
 
 
@@ -44,69 +46,54 @@ void *processLines(void *args){
     ThreadArgs *threadArgs = (ThreadArgs *)args;
     FILE *file = fopen(threadArgs->filename, "r");  // Open file to read
     if(file == NULL)                                // If the file is unable to be opened
-        pthread_exit(-1);                           // Exit the thread with error code -1
+        pthread_exit(NULL);                         // Exit the thread with error code 1
 
     char line[2001];                                        // longest line is 2000 characters + '\0'
     for(uint64_t i = 0; i < threadArgs->start_line; i++)    // Iterate until we reach the threads start line
         fscanf(file, "%[^\n]\n", line);                     // Advance the file pointer to the next line
     
-    char *maxAsciiBuffer = malloc(threadArgs->lines_per_thread);
-    for(uint64_t i = 0; i < threadArgs->lines_per_thread; i++){     // Iterate over each line for this thread
-        fscanf(file, "%[^\n]\n", line);                             // Grab the next associated line from the file
-        maxAsciiBuffer[i] = find_max_ascii(line);                   // Calculate the maximum ascii value
+    for(uint64_t i = 0; i < NUMBER_OF_LINES_PER_THREAD; i++){               // Iterate over each line for this thread
+        fscanf(file, "%[^\n]\n", line);                                     // Grab the next associated line from the file
+
+        pthread_mutex_lock(&mutex);                                         // Wait to secure the mutex
+        biggest_char[threadArgs->thread_id][i] = find_max_ascii(line);      // Store the max ascii valu efrom the current line into to global buffer
+        pthread_mutex_unlock(&mutex);                                       // Safely release the mutex lock
     }
 
-    fclose(file);
-    pthread_exit(NULL);
+    free(args);             // Free the alocated memory
+    fclose(file);           // Close the file 
+    pthread_exit(NULL);     // Return a success message
 }
 
 int main()
 {
-    printf("Starting...\n");
-    char *line = (char*) malloc(2001); // No lines longer than 2000 chars + null termination
-    FILE *file = fopen(TEXT_FILE, "r");
-    if(file == NULL){
-        perror("Unable to open file");
+    if(pthread_mutex_init(&mutex, NULL) != 0){ // If the mutex fails to initialize
+        perror("Mutex initilization has failed!");
         exit(EXIT_FAILURE);
     }
 
-    char discard[2001];
-    for(int i = 0; i < 2; i++)
-        fscanf(file, "%[^\n]\n", discard);
-    fscanf(file, "%[^\n]\n", line);
-    printf("%s\n", line);
+    pthread_t *threadArr = malloc(sizeof(pthread_t) * NUMBER_OF_THREADS);   // Initialize the threads
 
-    // uint32_t num_lines = 0;
-    // while(!feof(file)){
-    //     fscanf(file, "%[^\n]\n", line);
-    //     uint8_t character = find_max_ascii(line);
-    //     printf("%d: (%c,%d)\n", num_lines++, character, character);
-    // }
+    for(int i = 0; i < NUMBER_OF_THREADS; i++){                 
+        ThreadArgs *thread = malloc(sizeof(ThreadArgs));        // Arguemnt passed into each thread
+        thread->start_line = NUMBER_OF_LINES_PER_THREAD * i;
+        thread->filename = TEXT_FILE;
+        thread->thread_id = i;
 
-    fclose(file);
-//     int nlines = 0, nchars = 0, err;
-//     char *line = (char*) malloc( 2001 ); // no lines larger than 2000 chars
+        if(pthread_create(&threadArr[i], NULL, processLines, thread) == 0)  // If thread creation is successful
+            printf("Thread %d created\n", threadArr[i]);                    // Show that the thread has successfully been created  
+    }
 
-//     // Read in the lines from the data file
-//     FILE *file = fopen( TEXT_FILE, "r" );
-//     if(file == NULL){
-//         perror("Unable to open file");
-//         exit(EXIT_FAILURE);
-//     }
+    for(int i = 0; i < NUMBER_OF_THREADS; i++){
+        pthread_join(threadArr[i], NULL);   // Wait until threadArr[i] joins the main thread (finishes its process)
 
-//     while(!feof(file)){
-//         err = fscanf(file, "%[^\n]\n", line);
-//         uint8_t character = find_max_ascii(line);
-//         printf("%d: (%c,%d)\n", nlines, character, character);
-//         nlines++;
-//     }
-
-//    fclose(file);
-
-    // for(int i = 0; i < 1000000; i++){
-
-    // }
-
+        for(int j = 0; j < NUMBER_OF_LINES_PER_THREAD; j++){    // threadArr[i] has finished, so we can print its data
+            uint32_t index = j + i*NUMBER_OF_LINES_PER_THREAD;  // Get the overall index
+            printf("%d: %c\n", index, biggest_char[i][j]);      // Print its index and its ascii value
+        }
+    }
+    
+    free(threadArr);
 }
 
 

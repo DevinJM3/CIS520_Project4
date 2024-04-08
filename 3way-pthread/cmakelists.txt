@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.5)
 
 PROJECT(use_pthread)
 
-if(WIN32)
-    add_compile_options(-DRUNNING_LOCAL)
+if(WIN32)                                   # If running on windows locally
+    add_compile_options(-DRUNNING_LOCAL)    # add compile argument so it uses the local path instead of the dan path
 endif()
 
 ADD_EXECUTABLE(use_pthread main.c)
