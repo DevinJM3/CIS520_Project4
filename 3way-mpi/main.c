@@ -82,7 +82,7 @@ int main()
 
     if (taskID == 0){ //For the main process
         for(int i = 1; i < numProcesses; ++i){
-            uint32_t start_line = numProcesses * i; //Calculates the start line for each process
+            uint32_t start_line = linesPerProcess * i; //Calculates the start line for each process
             MPI_Send(&start_line, 1, MPI_INT, i, 0, MPI_COMM_WORLD); //Send the start line to each process.
         }
 
